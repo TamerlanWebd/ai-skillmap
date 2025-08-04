@@ -6,7 +6,9 @@ import { Progress } from "@/components/ui/progress";
 export type SkillNodeData = {
   label: string;
   progress: number;
+  url?: string;
 };
+
 export function SkillNode({ data }: NodeProps<SkillNodeData>) {
   return (
     <Card className="w-64 shadow-lg border-2 border-transparent hover:border-primary transition-colors duration-200">

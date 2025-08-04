@@ -1,6 +1,7 @@
 "use client";
 
 import { AddSkillDialog } from "@/app/components/add-skill-dialog";
+import { EditSkillDialog } from "@/app/components/edit-skill-dialog";
 import SkillMap from "@/app/components/skill-map";
 
 export default function DashboardPage() {
@@ -10,6 +11,7 @@ export default function DashboardPage() {
       <div className="absolute top-4 right-4 z-10">
         <AddSkillDialog />
       </div>
+      <EditSkillDialog />
     </div>
   );
 }

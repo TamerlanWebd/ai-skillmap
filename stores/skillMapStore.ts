@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create, StateCreator } from "zustand";
 import {
   Connection,
   Edge,
@@ -27,40 +27,47 @@ const getInitialNodes = (): Node<SkillNodeData>[] => [
     id: "add_skill",
     type: "skill",
     position: { x: 250, y: 350 },
-    data: { label: "Добавьте свой первый навык", progress: 0 },
+    data: {
+      label: "Дважды кликните, чтобы редактировать",
+      progress: 0,
+      url: "https://roadmap.sh",
+    },
   },
 ];
 
-type RFState = {
+interface RFState {
   nodes: Node<SkillNodeData>[];
   edges: Edge[];
   isLoaded: boolean;
+  editingNodeId: string | null;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   addSkillNode: (skillName: string) => void;
   loadMap: () => Promise<void>;
-  saveMap: () => void;
-};
-
-const debouncedSave = debounce((nodes: Node[], edges: Edge[]) => {
-  if (nodes.length === 0 && edges.length === 0) return;
-  console.log("Saving map to DB...");
+  setEditingNode: (nodeId: string | null) => void;
+  updateNodeData: (nodeId: string, newData: Partial<SkillNodeData>) => void;
+}
+const debouncedSave = debounce((get: () => RFState) => {
+  if (!get().isLoaded) return;
+  const { nodes, edges } = get();
+  console.log("Saving map to DB with latest state...");
   axios.post("/api/skillmap", { nodes, edges });
 }, 2000);
 
-const useSkillMapStore = create<RFState>((set, get) => ({
+const storeCreator: StateCreator<RFState> = (set, get) => ({
   nodes: [],
   edges: [],
   isLoaded: false,
+  editingNodeId: null,
 
   onNodesChange: (changes: NodeChange[]) => {
     set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) }));
-    get().saveMap();
+    debouncedSave(get);
   },
   onEdgesChange: (changes: EdgeChange[]) => {
     set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
-    get().saveMap();
+    debouncedSave(get);
   },
   onConnect: (connection: Connection) => {
     set((state) => ({
@@ -69,9 +76,8 @@ const useSkillMapStore = create<RFState>((set, get) => ({
         state.edges
       ),
     }));
-    get().saveMap();
+    debouncedSave(get);
   },
-
   addSkillNode: (skillName: string) => {
     const newNode: Node<SkillNodeData> = {
       id: `${Date.now()}`,
@@ -79,34 +85,55 @@ const useSkillMapStore = create<RFState>((set, get) => ({
       position: { x: Math.random() * 400, y: Math.random() * 400 },
       data: { label: skillName, progress: 0 },
     };
-
     set((state) => ({ nodes: [...state.nodes, newNode] }));
-    get().saveMap();
+    debouncedSave(get);
   },
+  updateNodeData: (nodeId, newData) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.id === nodeId) {
+          return { ...node, data: { ...node.data, ...newData } };
+        }
+        return node;
+      }),
+    }));
+    debouncedSave(get);
+  },
+  setEditingNode: (nodeId) => {
+    set({ editingNodeId: nodeId });
+  },
+  loadMap: async () => {},
+});
 
-  loadMap: async () => {
-    if (get().isLoaded) return;
-    try {
-      console.log("Loading map from DB...");
-      const response = await axios.get("/api/skillmap");
-      const { nodes, edges } = response.data;
+const useSkillMapStore = create(storeCreator);
+const loadMap = async () => {
+  const { isLoaded } = useSkillMapStore.getState();
+  if (isLoaded) return;
 
-      if (!nodes || nodes.length === 0) {
-        set({ nodes: getInitialNodes(), edges: [], isLoaded: true });
-      } else {
-        set({ nodes, edges, isLoaded: true });
-      }
-    } catch (error) {
-      console.error("Failed to load map, using initial state.", error);
-      set({ nodes: getInitialNodes(), edges: [], isLoaded: true });
+  try {
+    console.log("Loading map from DB...");
+    const response = await axios.get("/api/skillmap");
+    const { nodes, edges } = response.data;
+
+    if (!nodes || nodes.length === 0) {
+      useSkillMapStore.setState({
+        nodes: getInitialNodes(),
+        edges: [],
+        isLoaded: true,
+      });
+    } else {
+      useSkillMapStore.setState({ nodes, edges, isLoaded: true });
     }
-  },
+  } catch (error) {
+    console.error("Failed to load map, using initial state.", error);
+    useSkillMapStore.setState({
+      nodes: getInitialNodes(),
+      edges: [],
+      isLoaded: true,
+    });
+  }
+};
 
-  saveMap: () => {
-    if (!get().isLoaded) return;
-    const { nodes, edges } = get();
-    debouncedSave(nodes, edges);
-  },
-}));
+useSkillMapStore.setState({ loadMap });
 
 export default useSkillMapStore;
