@@ -11,45 +11,77 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
 } from "reactflow";
+import { SkillNodeData } from "@/app/components/custom-nodes/SkillNode";
 
 type RFState = {
-  nodes: Node[];
+  nodes: Node<SkillNodeData>[];
   edges: Edge[];
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
-  // Сюда мы будем добавлять новые действия, например, addSkillNode
+  addSkillNode: (skillName: string) => void;
 };
+const initialNodes: Node<SkillNodeData>[] = [
+  {
+    id: "1",
+    type: "skill",
+    position: { x: 250, y: 50 },
+    data: { label: "Frontend", progress: 80 },
+  },
+  {
+    id: "2",
+    type: "skill",
+    position: { x: 100, y: 250 },
+    data: { label: "React", progress: 95 },
+  },
+  {
+    id: "3",
+    type: "skill",
+    position: { x: 400, y: 250 },
+    data: { label: "Next.js", progress: 70 },
+  },
+];
 
 const useSkillMapStore = create<RFState>((set, get) => ({
-  nodes: [
-    {
-      id: "1",
-      type: "input",
-      data: { label: "Frontend" },
-      position: { x: 250, y: 5 },
-    },
-    { id: "2", data: { label: "React" }, position: { x: 100, y: 100 } },
-    { id: "3", data: { label: "Next.js" }, position: { x: 400, y: 100 } },
-  ],
+  nodes: initialNodes,
   edges: [
-    { id: "e1-2", source: "1", target: "2" },
-    { id: "e1-3", source: "1", target: "3" },
+    {
+      id: "e1-2",
+      source: "1",
+      target: "2",
+      animated: true,
+      type: "smoothstep",
+    },
+    {
+      id: "e1-3",
+      source: "1",
+      target: "3",
+      animated: true,
+      type: "smoothstep",
+    },
   ],
-  onNodesChange: (changes: NodeChange[]) => {
+  onNodesChange: (changes: NodeChange[]) =>
+    set({ nodes: applyNodeChanges(changes, get().nodes) }),
+  onEdgesChange: (changes: EdgeChange[]) =>
+    set({ edges: applyEdgeChanges(changes, get().edges) }),
+  onConnect: (connection: Connection) =>
     set({
-      nodes: applyNodeChanges(changes, get().nodes),
-    });
-  },
-  onEdgesChange: (changes: EdgeChange[]) => {
-    set({
-      edges: applyEdgeChanges(changes, get().edges),
-    });
-  },
-  onConnect: (connection: Connection) => {
-    set({
-      edges: addEdge(connection, get().edges),
-    });
+      edges: addEdge(
+        { ...connection, animated: true, type: "smoothstep" },
+        get().edges
+      ),
+    }),
+  addSkillNode: (skillName: string) => {
+    const newNode: Node<SkillNodeData> = {
+      id: `${Date.now()}`,
+      type: "skill",
+      position: { x: Math.random() * 400, y: Math.random() * 400 },
+      data: {
+        label: skillName,
+        progress: 0,
+      },
+    };
+    set({ nodes: [...get().nodes, newNode] });
   },
 }));
 
