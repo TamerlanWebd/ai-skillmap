@@ -6,82 +6,106 @@ import {
   Node,
   NodeChange,
   addEdge,
-  OnNodesChange,
-  OnEdgesChange,
   applyNodeChanges,
   applyEdgeChanges,
+  OnNodesChange,
+  OnEdgesChange,
 } from "reactflow";
+
+import axios from "axios";
+import debounce from "lodash.debounce";
 import { SkillNodeData } from "@/app/components/custom-nodes/SkillNode";
+
+const getInitialNodes = (): Node<SkillNodeData>[] => [
+  {
+    id: "welcome",
+    type: "skill",
+    position: { x: 250, y: 150 },
+    data: { label: "Добро пожаловать в AI SkillMap!", progress: 100 },
+  },
+  {
+    id: "add_skill",
+    type: "skill",
+    position: { x: 250, y: 350 },
+    data: { label: "Добавьте свой первый навык", progress: 0 },
+  },
+];
 
 type RFState = {
   nodes: Node<SkillNodeData>[];
   edges: Edge[];
+  isLoaded: boolean;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   addSkillNode: (skillName: string) => void;
+  loadMap: () => Promise<void>;
+  saveMap: () => void;
 };
-const initialNodes: Node<SkillNodeData>[] = [
-  {
-    id: "1",
-    type: "skill",
-    position: { x: 250, y: 50 },
-    data: { label: "Frontend", progress: 80 },
-  },
-  {
-    id: "2",
-    type: "skill",
-    position: { x: 100, y: 250 },
-    data: { label: "React", progress: 95 },
-  },
-  {
-    id: "3",
-    type: "skill",
-    position: { x: 400, y: 250 },
-    data: { label: "Next.js", progress: 70 },
-  },
-];
+
+const debouncedSave = debounce((nodes: Node[], edges: Edge[]) => {
+  if (nodes.length === 0 && edges.length === 0) return;
+  console.log("Saving map to DB...");
+  axios.post("/api/skillmap", { nodes, edges });
+}, 2000);
 
 const useSkillMapStore = create<RFState>((set, get) => ({
-  nodes: initialNodes,
-  edges: [
-    {
-      id: "e1-2",
-      source: "1",
-      target: "2",
-      animated: true,
-      type: "smoothstep",
-    },
-    {
-      id: "e1-3",
-      source: "1",
-      target: "3",
-      animated: true,
-      type: "smoothstep",
-    },
-  ],
-  onNodesChange: (changes: NodeChange[]) =>
-    set({ nodes: applyNodeChanges(changes, get().nodes) }),
-  onEdgesChange: (changes: EdgeChange[]) =>
-    set({ edges: applyEdgeChanges(changes, get().edges) }),
-  onConnect: (connection: Connection) =>
-    set({
+  nodes: [],
+  edges: [],
+  isLoaded: false,
+
+  onNodesChange: (changes: NodeChange[]) => {
+    set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) }));
+    get().saveMap();
+  },
+  onEdgesChange: (changes: EdgeChange[]) => {
+    set((state) => ({ edges: applyEdgeChanges(changes, state.edges) }));
+    get().saveMap();
+  },
+  onConnect: (connection: Connection) => {
+    set((state) => ({
       edges: addEdge(
         { ...connection, animated: true, type: "smoothstep" },
-        get().edges
+        state.edges
       ),
-    }),
+    }));
+    get().saveMap();
+  },
+
   addSkillNode: (skillName: string) => {
     const newNode: Node<SkillNodeData> = {
       id: `${Date.now()}`,
       type: "skill",
       position: { x: Math.random() * 400, y: Math.random() * 400 },
-      data: {
-        label: skillName,
-        progress: 0,
-      },
+      data: { label: skillName, progress: 0 },
     };
-    set({ nodes: [...get().nodes, newNode] });
+
+    set((state) => ({ nodes: [...state.nodes, newNode] }));
+    get().saveMap();
+  },
+
+  loadMap: async () => {
+    if (get().isLoaded) return;
+    try {
+      console.log("Loading map from DB...");
+      const response = await axios.get("/api/skillmap");
+      const { nodes, edges } = response.data;
+
+      if (!nodes || nodes.length === 0) {
+        set({ nodes: getInitialNodes(), edges: [], isLoaded: true });
+      } else {
+        set({ nodes, edges, isLoaded: true });
+      }
+    } catch (error) {
+      console.error("Failed to load map, using initial state.", error);
+      set({ nodes: getInitialNodes(), edges: [], isLoaded: true });
+    }
+  },
+
+  saveMap: () => {
+    if (!get().isLoaded) return;
+    const { nodes, edges } = get();
+    debouncedSave(nodes, edges);
   },
 }));
 
