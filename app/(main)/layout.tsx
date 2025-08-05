@@ -1,4 +1,4 @@
-import { Header } from "@/app/components/header";
+import { Header } from "../components/header";
 
 export default function MainLayout({
   children,
@@ -6,9 +6,9 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div>
+    <div className="flex flex-col h-screen bg-background">
       <Header />
-      <main>{children}</main>
+      <main className="flex-1 relative overflow-hidden">{children}</main>
     </div>
   );
 }
